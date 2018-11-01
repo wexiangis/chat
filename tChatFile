@@ -1,0 +1,11 @@
+""   "ATE"                 #启用指令回显
+"OK" "ATH"                 #结束之前的连接
+"OK" "AT+CGDCONT=1,\"IP\",\"CMNET\"" #设置APN(注意使用双引号时加上反斜杠)
+"OK" "AT^CARDMODE"         #(huawei指令)检查SIM状态
+1 "ERROR" "AT^SIMSWITCH?"  #(huawei指令)当前SIM卡选择
+2 "0" "AT^SIMSWITCH=1"     #(huawei指令)切换到SIM卡1
+2 "1" "AT^SIMSWITCH=0"     #(huawei指令)切换到SIM卡0
+"OK"  "ATDT*98*1#"         #测试拨号(移动)
+"OK"  SLEEP  1
+""  SAY  "ABC"
+EXIT  125
