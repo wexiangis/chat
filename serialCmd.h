@@ -50,17 +50,19 @@ typedef struct{
     bool err;           //接收线程告诉发指令线程句柄读取出错: 退出等待
     //
     char sendBuff[128]; //发出指令
-    char checkBuff[128];//期望返回内容
+    char **checkBuff;   //期望返回内容 一个二维数组 可同时匹配多条 按顺序优先级匹配
     //
     char *recvBuff;     //指向传入的用来接收回复信息的地址
     int recvBuffSize;   //接收回复信息的地址最大长度
+    //
+    int retHit;         //返回命中checkBuff[n]中的n的序号
     //
     bool exit;          //告诉接收线程结束循环并退出
     bool show;          //显示通信过程
 }SerialCmd_Struct;
 
 //
-bool serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char *checkBuff, int waitMinute, int retryTime, char *recvBuff, int recvBuffSize);
+int serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char **checkBuff, int waitMinute, int retryTime, char *recvBuff, int recvBuffSize);
 
 SerialCmd_Struct *serialCmd_init(char *devPath, int boaudrate);
 bool serialCmd_restart(SerialCmd_Struct *ss);

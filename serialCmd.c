@@ -252,8 +252,9 @@ int attr_set(int fd, SERIAL_ATTR_ST *serial_attr)
 //
 void serialCmd_thread_read(void *argv)
 {
-    int ret;
+    int ret, count;
     char buff[1024];
+    char **p;
     //
     SerialCmd_Struct *ss = (SerialCmd_Struct *)argv;
     if(ss == NULL)
@@ -279,18 +280,29 @@ void serialCmd_thread_read(void *argv)
         else if(ret > 0 && ss->transferFlag)  // 工作模式下
         {
             if(ss->show)
-                printf("serialCmd recv : ret = %d (tF:%s rF:%s) check [%s]\r\n%s\r\n", 
+            {
+                printf("serialCmd recv : ret = %d (tF:%s rF:%s) check : \r\n", 
                     ret, 
                     (ss->transferFlag?"true":"false"), 
-                    (ss->resultFlag?"true":"false"), 
-                    ss->checkBuff, 
-                    buff);
+                    (ss->resultFlag?"true":"false"));
+                p = ss->checkBuff;
+                while(p)
+                    printf("%s ", *p++);
+                printf("\r\n%s\r\n", buff);
+            }
             //备份返回, 如有需要
             if(ss->recvBuff && ret < ss->recvBuffSize)
                 memcpy(ss->recvBuff, buff, ret);
             // 比对返回
-            if(serialCmd_stringCompare(buff, ret, ss->checkBuff, strlen(ss->checkBuff)))
-                ss->resultFlag = true;
+            for(p = ss->checkBuff, count = 0; p; p++)
+            {
+                if(serialCmd_stringCompare(buff, ret, *p, strlen(*p)))
+                {
+                    ss->retHit = count;
+                    ss->resultFlag = true;
+                    break;
+                }
+            }
             //continue;
         }
         else if(ret < 0)    //串口错误, 跳出并结束线程
@@ -392,16 +404,16 @@ bool serialCmd_cmd_transfer(SerialCmd_Struct *ss)
     return false;
 }
 //
-bool serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char *checkBuff, int waitMinute, int retryTime, char *recvBuff, int recvBuffSize)
+int serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char **checkBuff, int waitMinute, int retryTime, char *recvBuff, int recvBuffSize)
 {
     bool ret;
     //
     if(ss == NULL)
-        return false;
+        return -1;
     if(ss->err)
     {
         if(!serialCmd_restart(ss))
-            return false;
+            return -1;
     }
     //
     ss->waitMinute = waitMinute;
@@ -413,8 +425,8 @@ bool serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char *checkBuff, in
     memset(ss->sendBuff, 0, sizeof(ss->sendBuff));
     strcpy(ss->sendBuff, cmdBuff);
     //
-    memset(ss->checkBuff, 0, sizeof(ss->checkBuff));
-    strcpy(ss->checkBuff, checkBuff);
+    ss->checkBuff = checkBuff;
+    ss->retHit = 0;
     //如有需要, 备份返回数据
     ss->recvBuff = recvBuff;
     ss->recvBuffSize = recvBuffSize;
@@ -426,9 +438,9 @@ bool serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char *checkBuff, in
     if(ret)
     {
         if(ss->resultFlag)
-            return true;
+            return ss->retHit;
     }
-    return false;
+    return -1;
 }
 //
 SerialCmd_Struct *serialCmd_init(char *devPath, int boaudrate)
