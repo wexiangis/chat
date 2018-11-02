@@ -38,36 +38,6 @@ struct ChatObject{
     struct CmdLine *cmdLine;
 };
 
-const char commit[] = "\r\n./chat_for_me909s "
-    "-d devPath[tty串口设备路径] "
-    "-f filePath[指令脚本文件路径] "
-    "-b baudrate[指定串口波特率默认115200] "
-    "-t n[指令等待超时n秒] "
-    "-s[打印交互信息] \r\n\r\n"
-    "----- 文件格式说明 ----- \r\n\r\n"
-    "\"期望返回\"              \"cmd1\" #正常指令行 \r\n"
-    "1 \"cmd1可能的期望返回\"  \"cmd2\" #一次分支指令行 \r\n"
-    "2 \"cmd2可能的期望返回\"  \"cmd5\" #二次分支指令行 \r\n"
-    "2 \"cmd2可能的期望返回\"  \"cmd6\" #二次分支指令行 \r\n"
-    "1 \"cmd1可能的期望返回\"  \"cmd3\" #一次分支指令行 \r\n"
-    "1 \"cmd1可能的期望返回\"  \"cmd4\" #一次分支指令行 \r\n"
-    "\"以上指令最后期望返回\"  \"cmd7\" #回到主流程 \r\n"
-    "SLEEP  1           #特殊指令(不用双引号) 延时1秒 \r\n"
-    "SAY    \"END\"       #特殊指令(不用双引号) 相当于print \r\n"
-    "EXIT   1           #特殊指令(不用双引号) 结束并返回1 \r\n\r\n"
-    "#其它说明1: 每行的期望返回对应的是上一条指令的返回 \r\n"
-    "#其它说明2: 特殊指令可以用在分支内 如: 3 SLEEP 1 \r\n\r\n"
-    "----- 文件参考 -----\r\n\r\n"
-    "\"\"   \"ATE\"                 #启用指令回显 \r\n"
-    "\"OK\" \"ATH\"                 #结束之前的连接 \r\n"
-    "\"OK\" \"AT+CGDCONT=1,\\\"IP\\\",\\\"CMNET\\\"\" #设置APN(注意使用双引号时加上反斜杠) \r\n"
-    "\"OK\" \"AT^CARDMODE\"         #(huawei指令)检查SIM状态 \r\n"
-    "1 \"ERROR\" \"AT^SIMSWITCH?\"  #(huawei指令)当前SIM卡选择 \r\n"
-    "2 \"0\" \"AT^SIMSWITCH=1\"     #(huawei指令)切换到SIM卡1 \r\n"
-    "2 \"1\" \"AT^SIMSWITCH=0\"     #(huawei指令)切换到SIM卡0 \r\n"
-    "\"OK\"  \"ATDT*98*1#\"         #测试拨号(移动) \r\n"
-    "\r\n\r\n";
-
 bool pathExist(char *path)
 {
     if(path == NULL)
@@ -84,12 +54,12 @@ int cmdFileTranslate(struct ChatObject *object)
     int lineLen;
     int count, lineCount = 1, tempCount;
     char *tempPoint, hit[5];
-    struct CmdLine *cmdLine = NULL;
+    struct CmdLine *cmdLine = NULL, *cmdLineHead = NULL;
     //
     if((fp = fopen(object->filePath, "rt")) == NULL)
         return 0;
     //
-    cmdLine = (struct CmdLine *)calloc(1, sizeof(struct CmdLine));
+    cmdLineHead = cmdLine = (struct CmdLine *)calloc(1, sizeof(struct CmdLine));
     while(1)
     {
         if(feof(fp))
@@ -102,14 +72,17 @@ int cmdFileTranslate(struct ChatObject *object)
         lineLen = strlen(lineBuff);
         if(lineLen == sizeof(lineBuff))
         {
-            printf("\r\n请保持指令行长度在 %d 字节以内 !!\r\n", (int)sizeof(lineBuff));
+            CONSOLE_PRINT("\r\n请保持指令行长度在 %d 字节以内 !!\r\n", (int)sizeof(lineBuff));
             return lineCount;
         }
         memset(hit, 0, sizeof(hit));//头标, 期望返回, 指令, 特殊指令, 特殊指令参数
         for(count = 0; count < lineLen; count++)
         {
+            // 无效行
+            if(lineBuff[count] == '#' || lineBuff[count] == '\r' || lineBuff[count] == '\n')
+                break;
             // 期望返回
-            if(lineBuff[count] == '\"')
+            else if(lineBuff[count] == '\"')
             {
                 if(hit[1] == 0)
                     tempPoint = cmdLine->cmdResult;
@@ -122,7 +95,17 @@ int cmdFileTranslate(struct ChatObject *object)
                     if(lineBuff[count] == '\\')
                     {
                         count += 1;
-                        tempPoint[tempCount++] = lineBuff[count];
+                        if(lineBuff[count] == 'r')
+                           tempPoint[tempCount++] = 0x0D;
+                        else if(lineBuff[count] == 'n')
+                           tempPoint[tempCount++] = 0x0A;
+                        else if(lineBuff[count] == 't')
+                        {
+                           tempPoint[tempCount++] = ' ';
+                           tempPoint[tempCount++] = ' ';
+                        }
+                        else 
+                            tempPoint[tempCount++] = lineBuff[count];
                     }
                     else if(lineBuff[count] == '\"')
                         break;
@@ -171,7 +154,17 @@ int cmdFileTranslate(struct ChatObject *object)
                                 if(lineBuff[count] == '\\')
                                 {
                                     count += 1;
-                                    cmdLine->spCmdParamBuff[tempCount++] = lineBuff[count];
+                                    if(lineBuff[count] == 'r')
+                                        cmdLine->spCmdParamBuff[tempCount++] = 0x0D;
+                                    else if(lineBuff[count] == 'n')
+                                        cmdLine->spCmdParamBuff[tempCount++] = 0x0A;
+                                    else if(lineBuff[count] == 't')
+                                    {
+                                        cmdLine->spCmdParamBuff[tempCount++] = ' ';
+                                        cmdLine->spCmdParamBuff[tempCount++] = ' ';
+                                    }
+                                    else
+                                        cmdLine->spCmdParamBuff[tempCount++] = lineBuff[count];
                                 }
                                 else if(lineBuff[count] == '\"')
                                     break;
@@ -225,26 +218,26 @@ int cmdFileTranslate(struct ChatObject *object)
             {
                 //
                 if(cmdLine->lineHead > 0)
-                    printf("line %d : %d ", cmdLine->lineNumber, cmdLine->lineHead);
+                    CONSOLE_PRINT("line %d : %d ", cmdLine->lineNumber, cmdLine->lineHead);
                 else
-                    printf("line %d : ", cmdLine->lineNumber);
+                    CONSOLE_PRINT("line %d : ", cmdLine->lineNumber);
                 //
                 if(hit[1])
-                    printf("\"%s\" ", cmdLine->cmdResult);
+                    CONSOLE_PRINT("\"%s\" ", cmdLine->cmdResult);
                 //
                 if(cmdLine->spCmd > SP_CMD_NULL)
                 {
                     if(cmdLine->spCmd == SP_CMD_SAY)
-                        printf("SAY  %s\r\n", cmdLine->spCmdParamBuff);
+                        CONSOLE_PRINT("SAY  %s\r\n", cmdLine->spCmdParamBuff);
                     else if(cmdLine->spCmd == SP_CMD_SLEEP)
-                        printf("SLEEP  %d\r\n", cmdLine->spCmdParam);
+                        CONSOLE_PRINT("SLEEP  %d\r\n", cmdLine->spCmdParam);
                     else if(cmdLine->spCmd == SP_CMD_EXIT)
-                        printf("EXIT  %d\r\n", cmdLine->spCmdParam);
+                        CONSOLE_PRINT("EXIT  %d\r\n", cmdLine->spCmdParam);
                     else
-                        printf("NULL  %d\r\n", cmdLine->spCmdParam);
+                        CONSOLE_PRINT("NULL  %d\r\n", cmdLine->spCmdParam);
                 }
                 else
-                    printf("\"%s\"\r\n", cmdLine->cmd);
+                    CONSOLE_PRINT("\"%s\"\r\n", cmdLine->cmd);
             }
             //
             cmdLine->next = (struct CmdLine *)calloc(1, sizeof(struct CmdLine));
@@ -263,22 +256,154 @@ int cmdFileTranslate(struct ChatObject *object)
         free(cmdLine->next);
         cmdLine->next = NULL;
     }
-    object->cmdLine = cmdLine;
+    object->cmdLine = cmdLineHead;
     if(object->showInfo)
-        printf("\r\n");
+        CONSOLE_PRINT("\r\n");
     //
     return 0;
+}
+
+#define EXPECT_MAX  1024
+static struct CmdLine *_expectCmdLineArray[EXPECT_MAX] = {NULL};
+static char *_expectCmdResultArray[EXPECT_MAX] = {NULL};
+
+int _getExpectResult(struct CmdLine *currentCmdLine)
+{
+    struct CmdLine *next = NULL;
+    int cHead = currentCmdLine->lineHead;
+    int count = 0;
+    //
+    memset(_expectCmdLineArray, 0, sizeof(_expectCmdLineArray));
+    memset(_expectCmdResultArray, 0, sizeof(_expectCmdResultArray));
+    for(next = currentCmdLine->next, count = 0; next && count < EXPECT_MAX; next = next->next)
+    {
+        // CONSOLE_PRINT("_getExpectResult : count = %d, line = %d, head = %d\r\n", count, next->lineNumber, next->lineHead);
+        // head == 0 候选项收集结束
+        if(next->lineHead == 0)
+        {
+            _expectCmdResultArray[count] = next->cmdResult;
+            _expectCmdLineArray[count] = next;
+            count += 1;
+            break;
+        }
+        // head == cHead + 1 在+1的head的行 和 0的head的行中收集
+        else if(next->lineHead == cHead + 1)
+        {
+            _expectCmdResultArray[count] = next->cmdResult;
+            _expectCmdLineArray[count] = next;
+            count += 1;
+        }
+    }
+    // CONSOLE_PRINT("_getExpectResult : return = %d\r\n", count);
+    //
+    return count;
 }
 
 int cmdRun(struct ChatObject *object)
 {
     // 打开串口
-    
-    // 
-
-    // 
+    SerialCmd_Struct *serialCmd = serialCmd_init(object->devPath, object->baudrate);
+    if(serialCmd == NULL)
+        return -1;
+    serialCmd->show = object->showInfo;
+    // 开始遍历
+    struct CmdLine *cmdLine = object->cmdLine;
+    while(cmdLine)
+    {
+        if(object->showInfo) CONSOLE_PRINT("line >>> %d : ", cmdLine->lineNumber);
+        // 优先使用特殊指令
+        if(cmdLine->spCmd > SP_CMD_NULL)
+        {
+            if(cmdLine->spCmd == SP_CMD_SLEEP)
+            {
+                if(object->showInfo) CONSOLE_PRINT("SLEEP %d\r\n", cmdLine->spCmdParam);
+                serialCmd_delay_ms(cmdLine->spCmdParam*1000);
+            }
+            else if(cmdLine->spCmd == SP_CMD_SAY)
+            {
+                if(object->showInfo) CONSOLE_PRINT("SAY\r\n");
+                CONSOLE_PRINT("%s\r\n", cmdLine->spCmdParamBuff);
+            }
+            if(cmdLine->spCmd == SP_CMD_EXIT)
+            {
+                if(object->showInfo) CONSOLE_PRINT("EXIT %d\r\n", cmdLine->spCmdParam);
+                serialCmd_release(serialCmd);
+                return cmdLine->spCmdParam;
+            }
+            // 寻找下一条
+            int ret = _getExpectResult(cmdLine);
+            if(ret > 0)
+                cmdLine = _expectCmdLineArray[0];
+            else
+                break;
+        }
+        // 其次使用指令
+        else if(cmdLine->cmd[0])
+        {
+            if(object->showInfo) CONSOLE_PRINT("%s\r\n", cmdLine->cmd);
+            int ret = _getExpectResult(cmdLine);
+            if(ret > 0)
+            {
+                int ret2 = serialCmd_transfer(serialCmd, cmdLine->cmd, _expectCmdResultArray, object->timeOut, 1, NULL, 0);
+                if(ret2 < 0)
+                {
+                    serialCmd_release(serialCmd);
+                    return cmdLine->lineNumber;
+                }
+                else
+                    cmdLine = _expectCmdLineArray[ret2];
+            }
+            else
+                break;
+        }
+        else
+        {
+            if(object->showInfo) CONSOLE_PRINT("NULL\r\n");
+            cmdLine = cmdLine->next;
+        }
+    }
+    //
+    serialCmd_release(serialCmd);
     return 0;
 }
+
+const char commit[] = "\r\n./chat-me909s \r\n"
+    "-f filePath[指令脚本文件路径] \r\n"
+    "-d devPath[tty串口设备路径默认/dev/ttyUSB0] \r\n"
+    "-b baudrate[指定串口波特率默认115200] \r\n"
+    "-t n[指令等待超时默认1000ms] \r\n"
+    "-s [打印交互信息默认关闭] \r\n"
+    "-c console[指定打印终端设备默认/dev/console] \r\n"
+    "\r\n"
+    "----- 文件格式说明 ----- \r\n\r\n"
+    "第1行:\"期望返回\"              \"cmd1\"#正常指令行 \r\n"
+    "第2行:1 \"cmd1可能的期望返回\"  \"cmd2\" #分支1 \r\n"
+    "第3行:2 \"cmd2可能的期望返回\"  \"cmd3\" #分支2 \r\n"
+    "第4行:2 \"cmd2可能的期望返回\"  \"cmd4\" #分支2 \r\n"
+    "第5行:3 \"cmd3,4可能的期望返回\" \"cmd5\"#分支3 \r\n"
+    "第6行:1 \"cmd1可能的期望返回\"  \"cmd6\" #分支1 \r\n"
+    "第7行:\"可能来自cmd1,2,3,4,5,6的期望返回\"  \"cmd8\" #前面的分支最后都会跳转到这里(只要没有退出) \r\n"
+    "第8行:SLEEP  1           #特殊指令 延时1秒 \r\n"
+    "第9行:SAY    \"END\"       #特殊指令 相当于print \r\n"
+    "第10行:EXIT   1          #特殊指令 结束并返回1 \r\n\r\n"
+    "#其它说明1: 每行的期望返回对应的是上一条指令的返回 \r\n"
+    "#其它说明2: 特殊指令可以用在分支内 如: 3 SLEEP 1 \r\n"
+    "#其它说明3: 特殊指令前面也可以有期望返回项 如: 3 \"OK\" SLEEP 1 \r\n"
+    "#其它说明4: 分支为n的行的命令发出后 其期望返回会从分支为n+1或0(没写分支号)的行获取 \r\n"
+    "#           比如上面第2行的cmd2发出后 会去依次匹配第3,4,7行的返回\r\n"
+    "#其它说明5: 正常运行结束返回0 其它返回行号表示所在行未得到匹配返回 \r\n\r\n"
+    "----- 文件参考 -----\r\n\r\n"
+    "\"\"   \"ATE\"                 #启用指令回显 \r\n"
+    "\"OK\" \"ATH\"                 #结束之前的连接 \r\n"
+    "\"OK\" \"AT+CGDCONT=1,\\\"IP\\\",\\\"CMNET\\\"\" #设置APN(注意使用双引号时加上反斜杠) \r\n"
+    "\"OK\" \"AT^CARDMODE\"         #(huawei指令)检查SIM状态 \r\n"
+    "1 \"ERROR\" \"AT^SIMSWITCH?\"  #(huawei指令)当前SIM卡选择 \r\n"
+    "2 \"0\" \"AT^SIMSWITCH=1\"     #(huawei指令)切换到SIM卡1 \r\n"
+    "2 \"1\" \"AT^SIMSWITCH=0\"     #(huawei指令)切换到SIM卡0 \r\n"
+    "3 EXIT 9                   #切卡之后退出 等下一轮拨号 \r\n"
+    "\"OK\"  \"ATDT*98*1#\"         #测试拨号(移动) \r\n"
+    "\"CONNECT\"  EXIT  0         #成功返回 \r\n"
+    "\r\n";
 
 int main(int argc, char *argv[])
 {
@@ -289,7 +414,9 @@ int main(int argc, char *argv[])
     int i;
     struct ChatObject chatObject;
     memset(&chatObject, 0, sizeof(struct ChatObject));
-    chatObject.baudrate = 115200;
+    strcpy(chatObject.devPath, "/dev/ttyUSB0");   //默认参数
+    chatObject.baudrate = 115200;   //默认参数
+    chatObject.timeOut = 1000;   //默认参数
     for(i = 1; i < argc; i++)
     {
         param = argv[i];
@@ -297,22 +424,35 @@ int main(int argc, char *argv[])
         if(strncmp(param, "-d", 2) == 0 && i + 1 < argc)
         {
             i += 1;
-            strcpy(chatObject.devPath, argv[i]);
-            if(!pathExist(chatObject.devPath))
+            if(!pathExist(argv[i]))
             {
-                printf("\r\n参数: -d %s 设备不存在 !!\r\n\r\n", chatObject.devPath);
+                CONSOLE_PRINT("\r\n参数: -d %s 设备不存在 !!\r\n\r\n", argv[i]);
                 goto ERROR_RETURN;
             }
+            memset(chatObject.devPath, 0 ,sizeof(chatObject.devPath));
+            strcpy(chatObject.devPath, argv[i]);
+        }
+        else if(strncmp(param, "-c", 2) == 0 && i + 1 < argc)
+        {
+            i += 1;
+            if(!pathExist(argv[i]))
+            {
+                CONSOLE_PRINT("\r\n参数: -c %s 终端设备不存在 !!\r\n\r\n", argv[i]);
+                goto ERROR_RETURN;
+            }
+            memset(CONSOLE_PATH, 0 ,sizeof(CONSOLE_PATH));
+            strcpy(CONSOLE_PATH, argv[i]);
         }
         else if(strncmp(param, "-f", 2) == 0 && i + 1 < argc)
         {
             i += 1;
-            strcpy(chatObject.filePath, argv[i]);
-            if(!pathExist(chatObject.filePath))
+            if(!pathExist(argv[i]))
             {
-                printf("\r\n参数: -f %s 文件不存在 !!\r\n\r\n", chatObject.filePath);
+                CONSOLE_PRINT("\r\n参数: -f %s 文件不存在 !!\r\n\r\n", argv[i]);
                 goto ERROR_RETURN;
             }
+            memset(chatObject.filePath, 0 ,sizeof(chatObject.filePath));
+            strcpy(chatObject.filePath, argv[i]);
         }
         else if(strncmp(param, "-b", 2) == 0 && i + 1 < argc)
         {
@@ -323,7 +463,7 @@ int main(int argc, char *argv[])
                 chatObject.baudrate = tempInt;
             else
             {
-                printf("\r\n参数: -b 错误 !! 波特率范围 9600/115200/230400/460800\r\n\r\n");
+                CONSOLE_PRINT("\r\n参数: -b 错误 !! 波特率范围 9600/115200/230400/460800\r\n\r\n");
                 goto ERROR_RETURN;
             }
         }
@@ -336,7 +476,7 @@ int main(int argc, char *argv[])
                 chatObject.timeOut = tempInt;
             else
             {
-                printf("\r\n参数: -t 错误 !!\r\n\r\n");
+                CONSOLE_PRINT("\r\n参数: -t 错误 !!\r\n\r\n");
                 goto ERROR_RETURN;
             }
         }
@@ -346,28 +486,26 @@ int main(int argc, char *argv[])
             goto TIPS_RETURN;
     }
     // 检查漏掉的关键参数
-    if(chatObject.devPath[0] == 0)
+    if(chatObject.filePath[0] == 0)
     {
-        printf("\r\n缺少设备路径 !! 请使用 -d devPath[tty串口设备路径]\r\n\r\n");
-        goto ERROR_RETURN;
-    }
-    else if(chatObject.filePath[0] == 0)
-    {
-        printf("\r\n缺少指令脚本文件路径 !! 请使用 -f filePath[指令脚本文件路径]\r\n\r\n");
+        CONSOLE_PRINT("\r\n缺少指令脚本文件路径 !! 请使用 -f filePath[指令脚本文件路径]\r\n\r\n");
         goto ERROR_RETURN;
     }
     // 解析指令脚本
     int ret = 0;
     if((ret = cmdFileTranslate(&chatObject)) > 0)
     {
-        printf("\r\n第 %d 行指令格式错误 !!\r\n\r\n", ret);
+        CONSOLE_PRINT("\r\n第 %d 行指令格式错误 !!\r\n\r\n", ret);
         goto ERROR_RETURN;
     }
     // 执行指令
-    return cmdRun(&chatObject);
+    ret = cmdRun(&chatObject);
+    if(chatObject.showInfo)
+        CONSOLE_PRINT("\r\n\r\nEND %d\r\n\r\n", ret);
+    return ret;
 
 TIPS_RETURN:
-    printf("%s", commit);
+    CONSOLE_PRINT("%s", commit);
     return -1;
 ERROR_RETURN:
     return -1;

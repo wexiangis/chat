@@ -71,4 +71,8 @@ void serialCmd_release(SerialCmd_Struct *ss);
 
 void serialCmd_delay_ms(unsigned int ms);
 
+//
+extern char CONSOLE_PATH[10240];
+void CONSOLE_PRINT(char *buff, ...);
+
 #endif

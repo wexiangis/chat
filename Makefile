@@ -1,7 +1,7 @@
 CC=
 
 target:
-	$(CC)gcc -O2 -Wall -o chat_for_me909s serialCmd.c main.c -lpthread
+	$(CC)gcc -O2 -Wall -o chat-me909s serialCmd.c main.c -lpthread
 
 clean:
-	@rm -rf chat_for_me909s
+	@rm -rf chat-me909s

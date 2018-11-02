@@ -14,6 +14,32 @@
 
 #include "serialCmd.h"
 
+#include <stdarg.h>
+
+char CONSOLE_PATH[10240] = "/dev/console";
+
+void CONSOLE_PRINT(char *buff, ...)
+{
+    char printBuff[10240] = {0};
+    int retLen = 0;
+    //
+    va_list ap;
+    va_start(ap , buff);
+    retLen = vsnprintf(printBuff, 10240, buff, ap);
+    // vprintf(buff, ap);
+    va_end(ap);
+    //
+    if(retLen < 1)
+        return;
+    //
+    int fd = open(CONSOLE_PATH, O_WRONLY);
+    if(fd > 0)
+    {
+        write(fd, printBuff, retLen);
+        close(fd);
+    }
+}
+
 void serialCmd_delay_ms(unsigned int ms)
 {
     struct timeval delay;
@@ -33,6 +59,10 @@ void serialCmd_delay_ms(unsigned int ms)
 bool serialCmd_stringCompare(char *buff, int buffLen, char *target, int targetLen)
 {
     int i, j;
+    //
+    if(targetLen == 0)
+        return true;
+    //
     for(i = 0; i < buffLen; i++)
     {
         if(buff[i] == target[0])
@@ -77,7 +107,7 @@ int attr_baud_set(int fd, unsigned int baud)
     memset(&option, 0, sizeof(option));
     if (0 != tcgetattr(fd, &option))
     {
-        printf("tcgetattr failed.\n");
+        CONSOLE_PRINT("tcgetattr failed.\n");
         return -1;
     }
 
@@ -88,34 +118,34 @@ int attr_baud_set(int fd, unsigned int baud)
             ret = tcflush(fd, TCIOFLUSH);
             if (0 != ret)
             {
-                printf("tcflush failed.\n");
+                CONSOLE_PRINT("tcflush failed.\n");
                 break;
             }
             ret = cfsetispeed(&option, g_attr_baud[i].baudrate);
             if (0 != ret)
             {
-                printf("cfsetispeed failed.\n");
+                CONSOLE_PRINT("cfsetispeed failed.\n");
                 ret = -1;
                 break;
             }
             ret = cfsetospeed(&option, g_attr_baud[i].baudrate);
             if (0 != ret)
             {
-                printf("cfsetospeed failed.\n");
+                CONSOLE_PRINT("cfsetospeed failed.\n");
                 ret = -1;
                 break;
             }
             ret = tcsetattr(fd, TCSANOW, &option);
             if  (0 != ret)
             {
-                printf("tcsetattr failed.\n");
+                CONSOLE_PRINT("tcsetattr failed.\n");
                 ret = -1;
                 break;
             }
             ret = tcflush(fd, TCIOFLUSH);
             if (0 != ret)
             {
-                printf("tcflush failed.\n");
+                CONSOLE_PRINT("tcflush failed.\n");
                 break;
             }
         }
@@ -131,7 +161,7 @@ int attr_other_set(int fd, SERIAL_ATTR_ST *serial_attr)
     memset(&option, 0, sizeof(option));
     if (0 != tcgetattr(fd, &option))
     {
-        printf("tcgetattr failed.\n");
+        CONSOLE_PRINT("tcgetattr failed.\n");
         return -1;
     }
 
@@ -152,7 +182,7 @@ int attr_other_set(int fd, SERIAL_ATTR_ST *serial_attr)
             break;
 
         default:
-            printf("invalid argument, unsupport datas size.\n");
+            CONSOLE_PRINT("invalid argument, unsupport datas size.\n");
             return -1;
     }
 
@@ -185,7 +215,7 @@ int attr_other_set(int fd, SERIAL_ATTR_ST *serial_attr)
             break;
 
         default:
-            printf("invalid argument, unsupport parity type.\n");
+            CONSOLE_PRINT("invalid argument, unsupport parity type.\n");
             return -1;
     }
 
@@ -201,7 +231,7 @@ int attr_other_set(int fd, SERIAL_ATTR_ST *serial_attr)
             break;
 
         default:
-            printf("invalid argument, unsupport stop bits.\n");
+            CONSOLE_PRINT("invalid argument, unsupport stop bits.\n");
             return -1;
     }
 
@@ -212,13 +242,13 @@ int attr_other_set(int fd, SERIAL_ATTR_ST *serial_attr)
 
     if (0 != tcflush(fd,TCIFLUSH))
     {
-        printf("tcflush failed.\n");
+        CONSOLE_PRINT("tcflush failed.\n");
         return -1;
     }
 
     if (0 != tcsetattr(fd, TCSANOW, &option))
     {
-        printf("tcsetattr failed.\n");
+        CONSOLE_PRINT("tcsetattr failed.\n");
         return -1;
     }
 
@@ -231,7 +261,7 @@ int attr_set(int fd, SERIAL_ATTR_ST *serial_attr)
 
     if (NULL == serial_attr)
     {
-        printf("invalid argument.\n");
+        CONSOLE_PRINT("invalid argument.\n");
         return -1;
     }
 
@@ -281,20 +311,23 @@ void serialCmd_thread_read(void *argv)
         {
             if(ss->show)
             {
-                printf("serialCmd recv : ret = %d (tF:%s rF:%s) check : \r\n", 
-                    ret, 
-                    (ss->transferFlag?"true":"false"), 
-                    (ss->resultFlag?"true":"false"));
+                // check
                 p = ss->checkBuff;
-                while(p)
-                    printf("%s ", *p++);
-                printf("\r\n%s\r\n", buff);
+                if(p && *p)
+                {
+                    CONSOLE_PRINT("check : %s", *p++);
+                    while(p && *p)
+                        CONSOLE_PRINT(" , %s", *p++);
+                    CONSOLE_PRINT("\r\n");
+                }
+                // recv
+                CONSOLE_PRINT("recv : %d\r\n%s\r\n", ret, buff);
             }
             //备份返回, 如有需要
             if(ss->recvBuff && ret < ss->recvBuffSize)
                 memcpy(ss->recvBuff, buff, ret);
             // 比对返回
-            for(p = ss->checkBuff, count = 0; p; p++)
+            for(p = ss->checkBuff, count = 0; p && *p; p++, count++)
             {
                 if(serialCmd_stringCompare(buff, ret, *p, strlen(*p)))
                 {
@@ -308,14 +341,14 @@ void serialCmd_thread_read(void *argv)
         else if(ret < 0)    //串口错误, 跳出并结束线程
         {
             ss->err = true;
-            printf("serialCmd read : err !\r\n");
+            CONSOLE_PRINT("read : err !\r\n");
             break;
         }
         serialCmd_delay_ms(1);    //延时1ms
     }
     //
     // if(ss->show)
-    //     printf("serialCmd recv end !! (err:%s exit:%s)\r\n", 
+    //     CONSOLE_PRINT("serialCmd recv end !! (err:%s exit:%s)\r\n", 
     //         (ss->err?"true":"false"), 
     //         (ss->exit?"true":"false"));
 }
@@ -324,7 +357,7 @@ bool serialCmd_restart(SerialCmd_Struct *ss)
 {
     if(ss == NULL || ss->devPath == NULL || strlen(ss->devPath) == 0 || ss->boaudrate <= 0)
     {
-        printf("serialCmd_restart : err !\r\n");
+        CONSOLE_PRINT("serialCmd_restart : err !\r\n");
         return false;
     }
     //
@@ -339,7 +372,7 @@ bool serialCmd_restart(SerialCmd_Struct *ss)
     //打开文件节点
     if((ss->fd = open(ss->devPath, O_RDWR)) <= 0)
     {
-        printf("serialCmd_restart : open %s err\r\n", ss->devPath);
+        CONSOLE_PRINT("serialCmd_restart : open %s err\r\n", ss->devPath);
         return false;
     }
     //串口初始化
@@ -355,7 +388,7 @@ bool serialCmd_restart(SerialCmd_Struct *ss)
     //创建读线程
     if(pthread_create(&ss->read_th, &ss->attr, (void *)serialCmd_thread_read, (void *)ss) != 0)
     {
-        printf("serialCmd_restart : pthread_create thread read failed\r\n");
+        CONSOLE_PRINT("serialCmd_restart : pthread_create thread read failed\r\n");
         return NULL;
     }
     //
@@ -373,19 +406,20 @@ bool serialCmd_cmd_transfer(SerialCmd_Struct *ss)
     ss->transferFlag = true;
     //
     serialCmd_delay_ms(1);    //延时1ms
-    // 指令测试2次
+    // 指令测试 n 次
     for(i = 0; i < ss->retryTime; i++)
     {
         if(ss->show)
-            printf("serialCmd write : %s", ss->sendBuff);
+            CONSOLE_PRINT("write : %s\r\n", ss->sendBuff);
 
         if(write(ss->fd, ss->sendBuff, strlen(ss->sendBuff)) < 0)  // 发出指令
         {
             ss->transferFlag = false;
             ss->err = true;
-            printf("serialCmd write : err !\r\n");
+            CONSOLE_PRINT("write : err !\r\n");
             return false;
         }
+        write(ss->fd, "\r\n", 2);
         timeOut = 0;
         while(timeOut < ss->waitMinute)    // 在一定时间内检测返回
         {
@@ -406,6 +440,12 @@ bool serialCmd_cmd_transfer(SerialCmd_Struct *ss)
 //
 int serialCmd_transfer(SerialCmd_Struct *ss, char *cmdBuff, char **checkBuff, int waitMinute, int retryTime, char *recvBuff, int recvBuffSize)
 {
+    // CONSOLE_PRINT("cmd : %s \r\n", cmdBuff);
+    // while(checkBuff && *checkBuff)
+    //     CONSOLE_PRINT("check : %s\r\n", *checkBuff++);
+    // CONSOLE_PRINT("\r\n");
+    // return 0;
+    
     bool ret;
     //
     if(ss == NULL)
@@ -449,12 +489,12 @@ SerialCmd_Struct *serialCmd_init(char *devPath, int boaudrate)
     //
     if(devPath == NULL)
     {
-        printf("serialCmd_init : devPath err : %s\r\n", devPath);
+        CONSOLE_PRINT("serialCmd_init : devPath err : %s\r\n", devPath);
         return NULL;
     }
     if(boaudrate <= 0)
     {
-        printf("serialCmd_init : boaudrate err : %d\r\n", boaudrate);
+        CONSOLE_PRINT("serialCmd_init : boaudrate err : %d\r\n", boaudrate);
         return NULL;
     }
     //
@@ -479,7 +519,7 @@ SerialCmd_Struct *serialCmd_init(char *devPath, int boaudrate)
     pthread_attr_setdetachstate(&ss->attr, PTHREAD_CREATE_DETACHED);   //禁用线程同步, 线程运行结束后自动释放
     if(pthread_create(&ss->read_th, &ss->attr, (void *)serialCmd_thread_read, (void *)ss) != 0)
     {
-        printf("serialCmd_init : pthread_create thread read failed\r\n");
+        CONSOLE_PRINT("serialCmd_init : pthread_create thread read failed\r\n");
         free(ss);
         return NULL;
     }
