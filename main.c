@@ -367,7 +367,7 @@ int cmdRun(struct ChatObject *object)
     return 0;
 }
 
-const char commit[] = "\r\n./chat-me909s \r\n"
+const char commit[] = "\r\nchat-me909s  V1.0\r\n"
     "-f filePath[指令脚本文件路径] \r\n"
     "-d devPath[tty串口设备路径默认/dev/ttyUSB0] \r\n"
     "-b baudrate[指定串口波特率默认115200] \r\n"
