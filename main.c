@@ -505,7 +505,7 @@ int main(int argc, char *argv[])
     return ret;
 
 TIPS_RETURN:
-    CONSOLE_PRINT("%s", commit);
+    printf("%s", commit);
     return -1;
 ERROR_RETURN:
     return -1;
