@@ -272,6 +272,7 @@ int _getExpectResult(struct CmdLine *currentCmdLine)
     struct CmdLine *next = NULL;
     int cHead = currentCmdLine->lineHead;
     int count = 0;
+    bool headPlusCheck = true;//允许继续查找"cHead + 1"分支的标志
     //
     memset(_expectCmdLineArray, 0, sizeof(_expectCmdLineArray));
     memset(_expectCmdResultArray, 0, sizeof(_expectCmdResultArray));
@@ -287,12 +288,15 @@ int _getExpectResult(struct CmdLine *currentCmdLine)
             break;
         }
         // head == cHead + 1 在+1的head的行 和 0的head的行中收集
-        else if(next->lineHead == cHead + 1)
+        else if(headPlusCheck && next->lineHead == cHead + 1)
         {
             _expectCmdResultArray[count] = next->cmdResult;
             _expectCmdLineArray[count] = next;
             count += 1;
         }
+        // 出现 (0,cHead] 范围内的分支, 往后不再查找"cHead + 1"分支
+        else if(next->lineHead <= cHead)
+            headPlusCheck = false;
     }
     // CONSOLE_PRINT("_getExpectResult : return = %d\r\n", count);
     //
